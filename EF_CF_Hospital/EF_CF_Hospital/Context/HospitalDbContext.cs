@@ -19,4 +19,6 @@ public class HospitalDbContext : DbContext
     public DbSet<Prescription> Prescriptions { get; set; }
 
     public DbSet<Medicament> Medicaments { get; set; }
+
+    public DbSet<PrescriptionMedicament> PrescriptionMedicaments { get; set; }
 }
