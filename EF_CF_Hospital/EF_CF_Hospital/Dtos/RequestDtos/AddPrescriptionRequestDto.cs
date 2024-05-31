@@ -12,6 +12,9 @@ public class AddPrescriptionRequestDto
     public ICollection<MedicamentDto> MedicamentDtos { get; set; } = null!;
 
     [Required]
+    public DoctorDto DoctorDto { get; set; } = null!;
+
+    [Required]
     public string Date { get; set; } = null!;
     
     [Required]
