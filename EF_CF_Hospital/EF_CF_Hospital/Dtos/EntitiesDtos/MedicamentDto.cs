@@ -11,6 +11,8 @@ public class MedicamentDto
     [MaxLength(100)]
     public string Name { get; set; } = null!;
     
+    public int? Dose { get; set; }
+    
     [Required]
     [MaxLength(100)]
     public string Description { get; set; } = null!;

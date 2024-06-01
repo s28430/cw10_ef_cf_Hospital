@@ -7,6 +7,6 @@ public interface IPatientRepository
     public Task<Patient?> GetPatientByIdAndFullNameAsync(int idPatient, string firstName,
         string lastName, CancellationToken cancellationToken);
 
-    public Task<int> AddPatientAsync(string firsName, string lastName, DateTime birthDate,
+    public Task<Patient> AddPatientAsync(string firsName, string lastName, DateTime birthDate,
         CancellationToken cancellationToken);
 }
