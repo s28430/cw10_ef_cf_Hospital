@@ -8,13 +8,14 @@ using EF_CF_Hospital.Repositories;
 namespace EF_CF_Hospital.Services;
 
 public class PrescriptionService(IPatientRepository patientRepository, IMedicamentRepository medicamentRepository, 
-    IDoctorRepository doctorRepository, IPrescriptionRepository prescriptionRepository) 
+    IDoctorRepository doctorRepository, IPrescriptionRepository prescriptionRepository, IUnitOfWork unitOfWork) 
     : IPrescriptionService
 {
     private readonly IPatientRepository _patientRepository = patientRepository;
     private readonly IMedicamentRepository _medicamentRepository = medicamentRepository;
     private readonly IDoctorRepository _doctorRepository = doctorRepository;
     private readonly IPrescriptionRepository _prescriptionRepository = prescriptionRepository;
+    private readonly IUnitOfWork _unitOfWork = unitOfWork;
 
 
     private async Task<Patient> EnsurePatientExistsAsync(PatientDto patientDto, CancellationToken cancellationToken)
@@ -43,6 +44,11 @@ public class PrescriptionService(IPatientRepository patientRepository, IMedicame
             if (medicament is null)
             {
                 throw new MedicamentNotFoundException($"Medicament with id {dto.IdMedicament} does not exist.");
+            }
+
+            if (dto.Name != medicament.Name)
+            {
+                throw new MedicamentNotFoundException($"Medicament with name '{dto.Name}' does not exist.");
             }
             result.Add(medicament);
         }
@@ -80,39 +86,64 @@ public class PrescriptionService(IPatientRepository patientRepository, IMedicame
             throw new DateInvalidException($"Due date must be later than the date of prescribing.");
         }
     }
+
+    private static void EnsureDoctorDataIsCorrect(DoctorDto requestData, Doctor realDoctor)
+    {
+        if (realDoctor.LastName != requestData.LastName || realDoctor.FirstName != requestData.FirstName)
+        {
+            throw new DoctorNotFoundException(
+                $"Doctor '{requestData.FirstName} {requestData.LastName}' was not found.");
+        }
+    }
     
     public async Task<AddPrescriptionResponseDto> AddPrescriptionAsync(AddPrescriptionRequestDto data,
         CancellationToken cancellationToken)
     {
-        var patient = await EnsurePatientExistsAsync(data.PatientDto, cancellationToken);
-        var medicaments = await GetMedicamentsAsync(data.MedicamentDtos, cancellationToken);
+        await using var transaction = await _unitOfWork.BeginTransactionAsync(cancellationToken);
 
-        if (medicaments.Count > 10)
+        try
         {
-            throw new TooManyMedicamentsException("Prescriptions cannot have more than 10 medicaments.");
-        }
+            var patient = await EnsurePatientExistsAsync(data.PatientDto, cancellationToken);
+            var medicaments = await GetMedicamentsAsync(data.MedicamentDtos, cancellationToken);
+
+            if (medicaments.Count > 10)
+            {
+                throw new TooManyMedicamentsException("Prescriptions cannot have more than 10 medicaments.");
+            }
         
-        var doctor = await GetDoctorByIdAsync(data.DoctorDto.IdDoctor, cancellationToken);
-        EnsureDatesAreValid(data);
+            var doctor = await GetDoctorByIdAsync(data.DoctorDto.IdDoctor, cancellationToken);
+            
+            EnsureDoctorDataIsCorrect(data.DoctorDto, doctor);
+            
+            EnsureDatesAreValid(data);
+            
+            var prescriptionId = await _prescriptionRepository.AddPrescriptionAsync(DateTime.Parse(data.Date), 
+                DateTime.Parse(data.DueDate), patient.IdPatient, doctor.IdDoctor, cancellationToken);
+            
+            foreach (var medicament in data.MedicamentDtos)
+            {
+                await _prescriptionRepository.AssociatePrescriptionWithMedicamentAsync(prescriptionId,
+                    medicament.IdMedicament, medicament.Dose, medicament.Description, cancellationToken);
+            }
 
-        var prescriptionId = await _prescriptionRepository.AddPrescriptionAsync(DateTime.Parse(data.Date), 
-            DateTime.Parse(data.DueDate), patient.IdPatient, doctor.IdDoctor, cancellationToken);
+            await _unitOfWork.CompleteAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
 
-        foreach (var medicament in data.MedicamentDtos)
-        {
-            await _prescriptionRepository.AssociatePrescriptionWithMedicamentAsync(prescriptionId,
-                medicament.IdMedicament, medicament.Dose, medicament.Description, cancellationToken);
+            var response = new AddPrescriptionResponseDto
+            {
+                Date = DateTime.Parse(data.Date),
+                DueDate = DateTime.Parse(data.DueDate),
+                IdPrescription = prescriptionId,
+                PatientDto = data.PatientDto,
+                DoctorDto = data.DoctorDto
+            };
+            
+            return response;
         }
-
-        var response = new AddPrescriptionResponseDto
+        catch (Exception)
         {
-            Date = DateTime.Parse(data.Date),
-            DueDate = DateTime.Parse(data.DueDate),
-            IdPrescription = prescriptionId,
-            PatientDto = data.PatientDto,
-            DoctorDto = data.DoctorDto
-        };
-        
-        return response;
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
 }

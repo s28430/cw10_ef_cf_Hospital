@@ -27,8 +27,7 @@ public class PatientRepository(HospitalDbContext dbContext) : IPatientRepository
             BirthDate = birthDate,
             Prescriptions = new List<Prescription>()
         };
-        _dbContext.Patients.Attach(newPatient);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _dbContext.Patients.AddAsync(newPatient, cancellationToken);
         return newPatient;
     }
 }

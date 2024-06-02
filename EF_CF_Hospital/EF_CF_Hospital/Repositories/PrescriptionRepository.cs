@@ -19,7 +19,9 @@ public class PrescriptionRepository(HospitalDbContext dbContext) : IPrescription
         };
 
         await _dbContext.Prescriptions.AddAsync(prescription, cancellationToken);
+
         await _dbContext.SaveChangesAsync(cancellationToken);
+        
         return prescription.IdPrescription;
     }
 
@@ -35,6 +37,7 @@ public class PrescriptionRepository(HospitalDbContext dbContext) : IPrescription
         };
         await _dbContext.PrescriptionMedicaments.AddAsync(pm, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        
         return pm;
     }
 }
